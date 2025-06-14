@@ -1,36 +1,48 @@
 using System.Collections;
 using System.Collections.Generic;
+using Unity.VisualScripting.Antlr3.Runtime.Tree;
 using UnityEngine;
 
 public class Enemy : MonoBehaviour
 {
     [Header("Enemy settings")] 
-    [SerializeField] float health;
-    [SerializeField] float recoilLength;
-    [SerializeField] float recoilFactor;
-    [SerializeField] bool isRecoiling = false;
+    [SerializeField] protected float health;
+    [SerializeField] public float damage;
+    [SerializeField] protected float recoilLength;
+    [SerializeField] protected float recoilFactor;
+    [SerializeField] protected bool isRecoiling = false;
+    [SerializeField] protected PlayerController player;
+    [SerializeField] public float speed;
 
-    float recoilTimer;
-    Rigidbody2D rb;
+    protected float recoilTimer;
+    [HideInInspector] public Rigidbody2D rb;
+    protected SpriteRenderer sr;
+    [HideInInspector] public Animator anim;
 
-    private void Awake()
+    protected enum EnemyStates
+    {
+        //Crawler
+        Crawler_Idle,
+        Crawler_Flip,
+
+        //Bat
+        Bat_Idle,
+        Bat_Chase,
+        Bat_Stunned,
+        Bat_Death,
+    }
+    protected EnemyStates currentEnemyState;
+
+    // Start is called before the first frame update
+    protected virtual void Start()
     {
         rb = GetComponent<Rigidbody2D>();
-    }
-    // Start is called before the first frame update
-    void Start()
-    {
-        
+        sr = GetComponent<SpriteRenderer>();
     }
 
     // Update is called once per frame
-    void Update()
+    protected virtual void Update()
     {
-        if (health <= 0) //Death check
-        {
-            Destroy(gameObject);
-        }
-
         if (isRecoiling)
         {
             if (recoilTimer < recoilLength)
@@ -43,14 +55,51 @@ public class Enemy : MonoBehaviour
                 recoilTimer = 0;
             }
         }
-    }
-
-    public void EnemyHit (float _damageDone, Vector2 _hitDirection, float _hitForce)
-    {
-        health -= _damageDone;
-        if (!isRecoiling )
+        else
         {
-            rb.AddForce(-_hitForce * recoilFactor * _hitDirection);
+            UpdateEnemyStates();
         }
     }
+
+    public virtual void EnemyGetsHit(float _damageDone, Vector2 _hitDirection, float _hitForce)
+    {
+        health -= _damageDone;
+        if (!isRecoiling)
+        {
+            rb.velocity = _hitForce * recoilFactor * _hitDirection;
+            isRecoiling = true;
+        }
+    }
+    protected void OnCollisionStay2D(Collision2D _other)
+    {
+        if (_other.gameObject.CompareTag("Player") && !PlayerController.Instance.pState.invincible)
+        {
+            Attack();
+            if (PlayerController.Instance.pState.alive)
+            {
+                PlayerController.Instance.HitStopTime(0, 5, 0.5f);
+            }
+        }
+    }
+
+    protected virtual void UpdateEnemyStates() { }
+
+    protected void ChangeState(EnemyStates _newState)
+    {
+        currentEnemyState = _newState;
+    }
+
+    protected virtual void Attack()
+    {
+        PlayerController.Instance.TakeDamage(damage);
+    }
+
+    protected virtual void Death(float _destroyTime)
+    {
+        Color flashColor = Color.white;
+        flashColor.a = Mathf.PingPong(Time.time * 45, 2.0f);
+        sr.color = flashColor;
+        Destroy(gameObject, _destroyTime);
+    }
+
 }
